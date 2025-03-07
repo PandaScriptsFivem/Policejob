@@ -1,5 +1,5 @@
 # Policejob [Beta]
--# [Free]
+# [Free]
 
 Infórmáció:
 - **Személyi igazolvány ellenőrzése**: A rendőrök képesek ellenőrizni a játékosok személyi igazolványát.
@@ -20,6 +20,6 @@ Depedency:
 - ox_lib
 
 **EZ CSAK EGY BÉTA VERZIÓ SOK MINDEN VÁLTOZHAT!**
--# Preview:  A videó 20:00 kor érhető el a scriptel együtt!  ||https://www.youtube.com/watch?v=k990asBeIn8|| 
+# Preview:  ||https://www.youtube.com/watch?v=k990asBeIn8|| 
 
 @everyone
