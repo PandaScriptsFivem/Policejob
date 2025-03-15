@@ -4,6 +4,14 @@ local locthet = false
 local handcuffed = false
 local isDragging = false
 local draggedPlayer = nil
+local vehicles = Config.Vehicles.vehicle
+local helicopters = Config.Vehicles.helicopters
+local hasVehicles = #vehicles > 0
+local hasHelicopters = #helicopters > 0
+local helicopterColor = hasHelicopters and "#34ed66" or "#ff0000"
+local carColor = hasVehicles and "#34ed66" or "#ff0000"
+local allowedVehicles = {}
+obj = {}
 options = {}
 
 local function IsInJob()
@@ -18,13 +26,12 @@ local function IsInJob()
 end
 
 Citizen.CreateThread(function ()
-    local x, y, z = table.unpack(Config.Blip.coords)
-    local blip = AddBlipForCoord(x, y, z)
+    local blip = AddBlipForCoord(Config.Blip.coords)
     SetBlipSprite(blip, Config.Blip.sprite)
     SetBlipColour(blip, Config.Blip.color)
     SetBlipScale(blip, Config.Blip.scale)
     BeginTextCommandSetBlipName("STRING")
-    AddTextComponentString(Config.Blip.label)
+    AddTextComponentString(Config.Locale.BlipName)
     EndTextCommandSetBlipName(blip)
     SetBlipAsShortRange(blip, true)
 end)
@@ -33,8 +40,8 @@ local function clocking()
     if not clocked then
         options = {
             {
-                title = "Szolgálat felvétele",
-                description = "Minden rendőr fel kell vagye a szolgálatot mielött elkezdi a munkáját!",
+                title = Config.Locale.Clockin_Title,
+                description = Config.Locale.Clockin_Desc,
                 icon = "circle-check",
                 iconColor = "#34ed66",
                 onSelect = function ()
@@ -59,7 +66,7 @@ local function clocking()
                     })
                     clocked = true
                     lib.notify({
-                        description = "Szolgálat felvéve!",
+                        description = Config.Locale.Clockin_Notify,
                         type = "success"
                     })
                 end
@@ -68,8 +75,8 @@ local function clocking()
     else
         options = {
             {
-                title = "Szolgálat leadása",
-                description = "Ha úgy gondolod hogy elegett tettél akkor le tudod adni a szolgálatot!!",
+                title = Config.Locale.ClockOut_Title,
+                description = Config.Locale.ClockOut_Desc,
                 icon = "circle-xmark",
                 iconColor = "#ed4434",
                 onSelect = function ()
@@ -122,11 +129,11 @@ function clothing:nearby()
             if locthet then
                 lib.registerContext({
                     id = "ruha",
-                    title = "Ruha választás",
+                    title = Config.Locale.Clothing_Title,
                     options = {
                         {
-                            title = "Ruhaváltás",
-                            description = "Szolgálati ruha levétele!",
+                            title = Config.Locale.Clothing_Title,
+                            description = Config.Locale.unClothing_Desc,
                             icon = "shirt",
                             iconColor = "#34ed66",
                             onSelect = function()
@@ -157,11 +164,11 @@ function clothing:nearby()
             else
                 lib.registerContext({
                     id = "ruha",
-                    title = "Ruha választás",
+                    title = Config.Locale.Clothing_Title,
                     options = {
                         {
-                            title = "Ruhaváltás",
-                            description = "Szolgálati ruha felvétele!",
+                            title = Config.Locale.Clothing_Title,
+                            description = Config.Locale.Clothing_Desc,
                             icon = "shirt",
                             iconColor = "#34ed66",
                             onSelect = function()
@@ -199,7 +206,7 @@ function clothing:nearby()
 end
 
 function clothing:onEnter()
-    lib.showTextUI(Config.Clothing.label, {
+    lib.showTextUI(Config.Locale.Clothing, {
         position = "right-center",
         icon = 'clothing',
     })
@@ -222,7 +229,7 @@ lib.points.new({
         end)
         Wait(150)
         if ispolice then
-            lib.showTextUI(Config.Clockin.label, {
+            lib.showTextUI(Config.Locale.Clockin, {
                 position = "right-center",
                 icon = 'clock',
             })
@@ -263,7 +270,7 @@ end
 local function spawnVehicle(model, coords, heading)
     local hash = GetHashKey(model)
     if not IsModelInCdimage(hash) or not IsModelAVehicle(hash) then
-        print("Érvénytelen jármű modell: " .. model)
+        print("^1[Error] ^7 Invalid Model: " .. model)
         return
     end
 
@@ -301,168 +308,150 @@ end
 lib.points.new({
     coords = Config.Vehicles.Coords,
     distance = 3,
-    onEnter = function ()
+    onEnter = function()
         if clocked then
-            lib.showTextUI(Config.Vehicles.label, {
+            lib.showTextUI(Config.Locale.Vehicle_Get, {
                 position = "right-center",
                 icon = 'car',
             })
         end
     end,
-    onExit = function ()
+    onExit = function()
         lib.hideTextUI()
     end,
-    nearby = function ()
-        if clocked then
-            if IsControlJustReleased(0, 38) then
-                local helicopterOptionsAvailable = #Config.Vehicles.helicopters > 0
-                local helicopterColor = helicopterOptionsAvailable and "#34ed66" or "#ff0000"
-                local carOptionsAvailable = #Config.Vehicles.vehicle > 0
-                local carColor = carOptionsAvailable and "#34ed66" or "#ff0000"
-                lib.registerContext({
-                    id = "pd",
-                    title = "Rendőrség",
-                    options = {
-                        {
-                            title = "Jármüvek",
-                            arrow = true,
-                            description = carOptionsAvailable and "Válassz egy jármüvet!" or "Nincsen elérhető Jármüvek!",
-                            icon = "car",
-                            iconColor = carColor,
-                            disabled = not carOptionsAvailable,
-                            onSelect = function ()
-                                if carOptionsAvailable then
-                                    local playerGrade =  ESX.PlayerData.job.grade
-                                    local options = {}
+    nearby = function()
+        if not clocked then return end
 
-                                    table.insert(options, {
-                                        title = "Vissza",
-                                        icon = "arrow-left",
-                                        iconColor = "#ffffff",
-                                        onSelect = function()
-                                            lib.showContext('pd')
-                                        end
-                                    })
+        if IsControlJustReleased(0, 38) then
+            local playerGrade = ESX.PlayerData.job.grade
 
-                                    for _, vehicleData in ipairs(Config.Vehicles.vehicle) do
-                                        local isAvailable = vehicleData.grade <= playerGrade 
-                                        local iconColor = isAvailable and "#34ed66" or "#ff0000" 
-
-                                        table.insert(options, {
-                                            title = vehicleData.label,
-                                            description = isAvailable and "Vegyél ki egy " .. vehicleData.label .. " járművet!" or "Nincs jogosultságod ehhez a járműhöz!",
-                                            icon = "car",
-                                            iconColor = iconColor,
-                                            disabled = not isAvailable,
-                                            onSelect = isAvailable and function()
-                                                local coords, heading = getFreeOutCoords()
-                                                if coords then
-                                                    spawnVehicle(vehicleData.model, coords, heading)
-                                                    lib.notify({description = vehicleData.label .. " kivéve!", type = "success" })
-                                                else
-                                                    lib.notify({description = "Nincs szabad parkolóhely!", type = "error" })
-                                                end
-                                            end or nil 
-                                        })
-                                    end
-
-                                    lib.registerContext({
-                                        id = "pd_vehicles",
-                                        title = "Járművek",
-                                        options = options
-                                    })
-                                    lib.showContext('pd_vehicles')
-                                end
-                            end
-                        },
-                        {
-                            title = "Helikopterek",
-                            arrow = true,
-                            description = helicopterOptionsAvailable and "Válassz egy helikoptert!" or "Nincs elérhető helikopter!",
-                            icon = "helicopter",
-                            iconColor = helicopterColor,
-                            disabled = not helicopterOptionsAvailable,
-                            onSelect = function ()
-                                local options = {}
-                                local playerGrade =  ESX.PlayerData.job.grade
-                                table.insert(options, {
-                                    title = "Vissza",
-                                    icon = "arrow-left",
-                                    iconColor = "#ffffff",
-                                    onSelect = function()
-                                        lib.showContext('pd')
-                                    end
-                                })
-                                for _, helicopterData in ipairs(Config.Vehicles.helicopters) do
-                                    local isAvailable = helicopterData.grade <= playerGrade
-                                    local iconColor = isAvailable and "#34ed66" or "#ff0000"
-                            
-                                    table.insert(options, {
-                                        title = helicopterData.label,
-                                        description = isAvailable and "Vegyél ki egy " .. helicopterData.label .. " helikoptert!" or "Nincs jogosultságod ehhez a helikopterhez!",
-                                        icon = "helicopter",
-                                        iconColor = iconColor,
-                                        disabled = not isAvailable,
-                                        onSelect = isAvailable and function()
-                                            local coords, heading = getFreeheliOutCoords()
-                                            if coords then
-                                                spawnVehicle(helicopterData.model, coords, heading)
-                                                lib.notify({description = helicopterData.label .. " kivéve!", type = "success" })
-                                            else
-                                                lib.notify({description = "Nincs szabad parkolóhely!", type = "error" })
-                                            end
-                                        end or nil
-                                    })
-                                end
-                                lib.registerContext({
-                                    id = "pd_helicopters",
-                                    title = "Helikopterek",
-                                    options = options
-                                })
-                                lib.showContext('pd_helicopters')
-                            end
-                        }
+            local function openVehicleMenu()
+                local options = {
+                    {
+                        title = Config.Locale.Back,
+                        icon = "arrow-left",
+                        iconColor = "#ffffff",
+                        onSelect = function() lib.showContext('pd') end
                     }
-                })
-                lib.showContext('pd')
+                }
 
+                for _, vehicleData in ipairs(vehicles) do
+                    local isAvailable = vehicleData.grade <= playerGrade
+                    table.insert(options, {
+                        title = vehicleData.label,
+                        description = isAvailable and (Config.Locale.Vehicle_Take .. " " .. vehicleData.label) or Config.Locale.Vehicle_NoPermission,
+                        icon = "car",
+                        iconColor = isAvailable and "#34ed66" or "#ff0000",
+                        disabled = not isAvailable,
+                        onSelect = isAvailable and function()
+                            local coords, heading = getFreeOutCoords()
+                            if coords then
+                                spawnVehicle(vehicleData.model, coords, heading)
+                                lib.notify({description = vehicleData.label .. Config.Locale.Vehicle_TakeOut, type = "success"})
+                            else
+                                lib.notify({description = Config.Locale.Vehicle_NoParking, type = "error"})
+                            end
+                        end or nil
+                    })
+                end
+
+                lib.registerContext({
+                    id = "pd_vehicles",
+                    title = "Járművek",
+                    options = options
+                })
+                lib.showContext('pd_vehicles')
             end
+
+            local function openHelicopterMenu()
+                local options = {
+                    {
+                        title = Config.Locale.Back,
+                        icon = "arrow-left",
+                        iconColor = "#ffffff",
+                        onSelect = function() lib.showContext('pd') end
+                    }
+                }
+
+                for _, helicopterData in ipairs(helicopters) do
+                    local isAvailable = helicopterData.grade <= playerGrade
+                    table.insert(options, {
+                        title = helicopterData.label,
+                        description = isAvailable and "Vegyél ki egy " .. helicopterData.label .. " helikoptert!" or "Nincs jogosultságod ehhez a helikopterhez!",
+                        icon = "helicopter",
+                        iconColor = isAvailable and "#34ed66" or "#ff0000",
+                        disabled = not isAvailable,
+                        onSelect = isAvailable and function()
+                            local coords, heading = getFreeheliOutCoords()
+                            if coords then
+                                spawnVehicle(helicopterData.model, coords, heading)
+                                lib.notify({description = helicopterData.label .. " kivéve!", type = "success"})
+                            else
+                                lib.notify({description = "Nincs szabad parkolóhely!", type = "error"})
+                            end
+                        end or nil
+                    })
+                end
+
+                lib.registerContext({
+                    id = "pd_helicopters",
+                    title = "Helikopterek",
+                    options = options
+                })
+                lib.showContext('pd_helicopters')
+            end
+
+            lib.registerContext({
+                id = "pd",
+                title = "Rendőrség",
+                options = {
+                    {
+                        title = "Jármüvek",
+                        arrow = true,
+                        description = hasVehicles and "Válassz egy jármüvet!" or "Nincsen elérhető Jármüvek!",
+                        icon = "car",
+                        iconColor = carColor,
+                        disabled = not hasVehicles,
+                        onSelect = hasVehicles and openVehicleMenu or nil
+                    },
+                    {
+                        title = "Helikopterek",
+                        arrow = true,
+                        description = hasHelicopters and "Válassz egy helikoptert!" or "Nincs elérhető helikopter!",
+                        icon = "helicopter",
+                        iconColor = helicopterColor,
+                        disabled = not hasHelicopters,
+                        onSelect = hasHelicopters and openHelicopterMenu or nil
+                    }
+                }
+            })
+            lib.showContext('pd')
         end
     end
 })
+
+for _, v in ipairs(Config.Vehicles.vehicle) do
+    allowedVehicles[GetHashKey(v.model)] = true
+end
+for _, v in ipairs(Config.Vehicles.helicopters) do
+    allowedVehicles[GetHashKey(v.model)] = true
+end
 
 lib.points.new({
     coords = Config.Vehicles.DelCoords,
     distance = 5,
     onEnter = function()
         local playerPed = PlayerPedId()
-        if clocked and IsPedInAnyVehicle(playerPed, false) then
-            local vehicle = GetVehiclePedIsIn(playerPed, false)
-            local vehicleModel = GetEntityModel(vehicle)
-            local isAllowedVehicle = false
+        if not clocked or not IsPedInAnyVehicle(playerPed, false) then return end
 
-            for _, v in ipairs(Config.Vehicles.vehicle) do
-                if GetHashKey(v.model) == vehicleModel then
-                    isAllowedVehicle = true
-                    break
-                end
-            end
+        local vehicle = GetVehiclePedIsIn(playerPed, false)
+        local vehicleModel = GetEntityModel(vehicle)
 
-            if not isAllowedVehicle then
-                for _, v in ipairs(Config.Vehicles.helicopters) do
-                    if GetHashKey(v.model) == vehicleModel then
-                        isAllowedVehicle = true
-                        break
-                    end
-                end
-            end
-
-            if isAllowedVehicle then
-                lib.showTextUI(Config.Vehicles.delLabel, {
-                    position = "right-center",
-                    icon = 'car',
-                })
-            end
+        if allowedVehicles[vehicleModel] then
+            lib.showTextUI(Config.Locale.Vehicle_Del, {
+                position = "right-center",
+                icon = 'car',
+            })
         end
     end,
     onExit = function()
@@ -470,74 +459,47 @@ lib.points.new({
     end,
     nearby = function()
         local playerPed = PlayerPedId()
-        if clocked and IsPedInAnyVehicle(playerPed, false) then
-            if IsControlJustReleased(0, 38) then
-                local vehicle = GetVehiclePedIsIn(playerPed, false)
-                local vehicleModel = GetEntityModel(vehicle)
-                local isAllowedVehicle = false
+        if not clocked or not IsPedInAnyVehicle(playerPed, false) then return end
 
-                for _, v in ipairs(Config.Vehicles.vehicle) do
-                    if GetHashKey(v.model) == vehicleModel then
-                        isAllowedVehicle = true
-                        break
-                    end
-                end
+        if IsControlJustReleased(0, 38) then
+            local vehicle = GetVehiclePedIsIn(playerPed, false)
+            local vehicleModel = GetEntityModel(vehicle)
 
-                if not isAllowedVehicle then
-                    for _, v in ipairs(Config.Vehicles.helicopters) do
-                        if GetHashKey(v.model) == vehicleModel then
-                            isAllowedVehicle = true
-                            break
-                        end
-                    end
-                end
+            if allowedVehicles[vehicleModel] then
+                TaskLeaveVehicle(playerPed, vehicle, 0)
+                Wait(1000)
 
-                if isAllowedVehicle then
-                    TaskLeaveVehicle(playerPed, vehicle, 0) 
-                    Wait(1000)
+                if NetworkHasControlOfEntity(vehicle) or NetworkRequestControlOfEntity(vehicle) then
                     ESX.Game.DeleteVehicle(vehicle)
                     lib.notify({ description = "Jármű visszaadva!", type = "success" })
                     lib.hideTextUI()
                 else
-                    lib.notify({ description = "Ez a jármű nem adható vissza itt!", type = "error" })
+                    lib.notify({ description = "Nem sikerült eltávolítani a járművet!", type = "error" })
                 end
+            else
+                lib.notify({ description = "Ez a jármű nem adható vissza itt!", type = "error" })
             end
         end
     end
 })
+
+local function isVehicleAllowed(vehicleModel)
+    return allowedVehicles[vehicleModel] or false
+end
 
 lib.points.new({
     coords = Config.Vehicles.HeliDelCoords,
     distance = 8,
     onEnter = function()
         local playerPed = PlayerPedId()
-        if clocked and IsPedInAnyVehicle(playerPed, false) then
-            local vehicle = GetVehiclePedIsIn(playerPed, false)
-            local vehicleModel = GetEntityModel(vehicle)
-            local isAllowedVehicle = false
+        if not clocked or not IsPedInAnyVehicle(playerPed, false) then return end
 
-            for _, v in ipairs(Config.Vehicles.vehicle) do
-                if GetHashKey(v.model) == vehicleModel then
-                    isAllowedVehicle = true
-                    break
-                end
-            end
-
-            if not isAllowedVehicle then
-                for _, v in ipairs(Config.Vehicles.helicopters) do
-                    if GetHashKey(v.model) == vehicleModel then
-                        isAllowedVehicle = true
-                        break
-                    end
-                end
-            end
-
-            if isAllowedVehicle then
-                lib.showTextUI(Config.Vehicles.HelidelLabel, {
-                    position = "right-center",
-                    icon = 'car',
-                })
-            end
+        local vehicle = GetVehiclePedIsIn(playerPed, false)
+        if isVehicleAllowed(GetEntityModel(vehicle)) then
+            lib.showTextUI(Config.Locale.Vehicle_Get, {
+                position = "right-center",
+                icon = 'car',
+            })
         end
     end,
     onExit = function()
@@ -545,37 +507,25 @@ lib.points.new({
     end,
     nearby = function()
         local playerPed = PlayerPedId()
-        if clocked and IsPedInAnyVehicle(playerPed, false) then
-            if IsControlJustReleased(0, 38) then
-                local vehicle = GetVehiclePedIsIn(playerPed, false)
-                local vehicleModel = GetEntityModel(vehicle)
-                local isAllowedVehicle = false
+        if not clocked or not IsPedInAnyVehicle(playerPed, false) then return end
 
-                for _, v in ipairs(Config.Vehicles.vehicle) do
-                    if GetHashKey(v.model) == vehicleModel then
-                        isAllowedVehicle = true
-                        break
-                    end
-                end
+        if IsControlJustReleased(0, 38) then
+            local vehicle = GetVehiclePedIsIn(playerPed, false)
+            local vehicleModel = GetEntityModel(vehicle)
 
-                if not isAllowedVehicle then
-                    for _, v in ipairs(Config.Vehicles.helicopters) do
-                        if GetHashKey(v.model) == vehicleModel then
-                            isAllowedVehicle = true
-                            break
-                        end
-                    end
-                end
+            if isVehicleAllowed(vehicleModel) then
+                TaskLeaveVehicle(playerPed, vehicle, 0)
+                Wait(2000)
 
-                if isAllowedVehicle then
-                    TaskLeaveVehicle(playerPed, vehicle, 0) 
-                    Wait(2000)
+                if NetworkHasControlOfEntity(vehicle) or NetworkRequestControlOfEntity(vehicle) then
                     ESX.Game.DeleteVehicle(vehicle)
                     lib.notify({ description = "Jármű visszaadva!", type = "success" })
                     lib.hideTextUI()
                 else
-                    lib.notify({ description = "Ez a jármű nem adható vissza itt!", type = "error" })
+                    lib.notify({ description = "Nem sikerült eltávolítani a járművet!", type = "error" })
                 end
+            else
+                lib.notify({ description = "Ez a jármű nem adható vissza itt!", type = "error" })
             end
         end
     end
@@ -587,7 +537,7 @@ lib.points.new({
     onEnter = function()
         local playerGrade =  ESX.PlayerData.job.grade
         if ispolice and playerGrade == Config.boss.grade and clocked then
-            lib.showTextUI(Config.boss.label, {
+            lib.showTextUI(Config.Locale.BossMenu, {
                 position = "right-center",
                 icon = 'clipboard',
             })
@@ -608,17 +558,147 @@ lib.points.new({
     end
 })
 
-local function updateContextMenu()
-    local player, distance = ESX.Game.GetClosestPlayer()
-    local isPlayerNear = distance ~= -1 and distance <= 3.0
-    local closestVehicle = lib.getClosestVehicle(GetEntityCoords(PlayerPedId()), 3.0, true)
+local function PlaceObject(prop, icon)
+    local modelName = prop
+    local playerPed = PlayerPedId()
+    local forwardVector = GetEntityForwardVector(playerPed)
+    local playerCoords = GetEntityCoords(playerPed)
 
+    if not IsModelInCdimage(modelName) then
+        return print("A modell nem található a játékban.")
+    end
+
+    RequestModel(modelName)
+    while not HasModelLoaded(modelName) do
+        Wait(100)
+    end
+
+    local propCoords = vector3(playerCoords.x + forwardVector.x * 1.5, playerCoords.y + forwardVector.y * 1.5, playerCoords.z)
+    local prop = CreateObjectNoOffset(modelName, propCoords.x, propCoords.y, propCoords.z, false, false, false)
+    SetEntityCollision(prop, false, false)
+    SetEntityAlpha(prop, 200, false)
+    FreezeEntityPosition(prop, true)
+    local editing = true
+
+    SetEntityVisible(prop, true, false)
+    PlaceObjectOnGroundProperly(prop)
+    lib.showTextUI(Config.Locale.Prop_Rotate)
+    SetEntityDrawOutline(prop, true)
+
+        Citizen.CreateThread(function()
+        while editing do
+            Citizen.Wait(0)
+            local x, y, z = table.unpack(GetEntityCoords(prop))
+            local heading = GetEntityHeading(prop)
+            local playerHeading = GetEntityHeading(playerPed)
+            local rad = math.rad(playerHeading)
+    
+            if IsControlPressed(0, 172) then
+                local forwardX = -math.sin(rad) * 0.02
+                local forwardY = math.cos(rad) * 0.02
+                if IsControlPressed(0, 174) then
+                    SetEntityCoords(prop, x + (forwardX - math.cos(rad) * 0.02), y + (forwardY - math.sin(rad) * 0.02), z)
+                elseif IsControlPressed(0, 175) then
+                    SetEntityCoords(prop, x + (forwardX + math.cos(rad) * 0.02), y + (forwardY + math.sin(rad) * 0.02), z)
+                else
+                    SetEntityCoords(prop, x + forwardX, y + forwardY, z)
+                end
+            end
+    
+            if IsControlPressed(0, 173) then
+                local backwardX = math.sin(rad) * 0.02
+                local backwardY = -math.cos(rad) * 0.02
+                if IsControlPressed(0, 174) then
+                    SetEntityCoords(prop, x + (backwardX - math.cos(rad) * 0.02), y + (backwardY - math.sin(rad) * 0.02), z)
+                elseif IsControlPressed(0, 175) then
+                    SetEntityCoords(prop, x + (backwardX + math.cos(rad) * 0.02), y + (backwardY + math.sin(rad) * 0.02), z)
+                else
+                    SetEntityCoords(prop, x + backwardX, y + backwardY, z)
+                end
+            end
+    
+            if IsControlPressed(0, 174) and not IsControlPressed(0, 172) and not IsControlPressed(0, 173) then
+                local leftX = -math.cos(rad) * 0.02
+                local leftY = -math.sin(rad) * 0.02
+                SetEntityCoords(prop, x + leftX, y + leftY, z)
+            end
+    
+            if IsControlPressed(0, 175) and not IsControlPressed(0, 172) and not IsControlPressed(0, 173) then
+                local rightX = math.cos(rad) * 0.02
+                local rightY = math.sin(rad) * 0.02
+                SetEntityCoords(prop, x + rightX, y + rightY, z)
+            end
+    
+            if IsControlPressed(0, 44) then
+                SetEntityCoords(prop, x, y, z + 0.02)
+            end
+    
+            if IsControlPressed(0, 38) then
+                SetEntityCoords(prop, x, y, z - 0.02)
+            end
+    
+            if IsControlPressed(0, 14) then
+                SetEntityHeading(prop, heading + 1.5)
+            end
+    
+            if IsControlPressed(0, 15) then
+                SetEntityHeading(prop, heading - 1.5)
+            end
+    
+            if IsControlJustPressed(0, 191) then
+                editing = false
+                PlaceObjectOnGroundProperly(prop)
+                local props = CreateObjectNoOffset(modelName, GetEntityCoords(prop), true, false, false)
+                SetEntityHeading(props, GetEntityHeading(prop))
+                DeleteObject(prop) 
+                SetEntityCollision(props, true, true)
+                SetEntityVisible(props, true, true)
+                FreezeEntityPosition(props, false)
+                SetObjectAsNoLongerNeeded(prop)
+            
+                lib.hideTextUI()
+                propCoords = GetEntityCoords(props)
+                table.insert(obj, props)
+                local point = lib.points.new({
+                    coords = propCoords,
+                    distance = 1.5,
+                    onEnter = function()
+                        lib.showTextUI(Config.Locale.Prop_Delete, {
+                            position = "right-center",
+                            icon = icon
+                        })
+                    end,
+                    onExit = function()
+                        lib.hideTextUI()
+                    end
+                })
+                function point:nearby()
+                    if IsControlJustReleased(0, 38) then
+                        SetEntityAsMissionEntity(props, false, false) 
+                        for i, v in ipairs(obj) do
+                            if v == props then
+                                table.remove(obj, i)
+                                break
+                            end
+                        end
+                        DeleteEntity(props)
+                        DeleteObject(props)
+                        self:remove()
+                        lib.hideTextUI()
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function updateContextMenu()
     lib.registerContext({
         id = "f",
-        title = "Rendőrség",
+        title = Config.Locale.BlipName,
         options = {
             {
-                title = "Ember Interackiók",
+                title = Config.Locale.Menu_Peaple,
                 icon = "handshake",
                 onSelect = function()
                     local player, distance = ESX.Game.GetClosestPlayer()
@@ -626,11 +706,11 @@ local function updateContextMenu()
                     local closestVehicle = lib.getClosestVehicle(GetEntityCoords(PlayerPedId()), 3.0, true)
                     lib.registerContext({
                         id = "ember",
-                        title = "Ember Interackiók",
+                        title = Config.Locale.Menu_Peaple,
                         menu = "f",
                         options = {
                             {
-                                title = "Személyi ellenőrzés",
+                                title = Config.Locale.Menu_checkID,
                                 icon = "id-card",
                                 onSelect = function()
                                     if isPlayerNear then
@@ -638,47 +718,47 @@ local function updateContextMenu()
                                             if data then
                                                 lib.registerContext({
                                                     id = "idcard",
-                                                    title = "Személyi ellenőrzés",
+                                                    title = Config.Locale.Menu_checkID,
                                                     menu = "ember",
                                                     options = {
                                                         {
-                                                            title = "Név: " .. data.name,
+                                                            title = Config.Locale.ID_Name .. data.name,
                                                             icon = "id-card",
                                                             iconColor = "#ffffff",
-                                                            description = "Kattints a vágólapra másoláshoz!",
+                                                            description = Config.Locale.Copy,
                                                             onSelect = function()
                                                                 lib.setClipboard(data.name)
                                                                 lib.notify({
-                                                                    description = "Név kimásolva a vágólapra!",
+                                                                    description = Config.Locale.Copy_Notify,
                                                                     type = "success"
                                                                 })
                                                             end
                                                         },
                                                         {
-                                                            title = "Munka: " .. data.job.. " - " .. data.grade,
+                                                            title = Config.Locale.ID_Job .. data.job.. " - " .. data.grade,
                                                             icon = "briefcase",
                                                             iconColor = "#bf6412"
                                                         },
                                                         {
-                                                            title = "Nem: " .. data.sex,
-                                                            icon = data.sex == "Férfi" and "mars" or "venus",
-                                                            iconColor = data.sex == "Férfi" and "#3e98f2" or "#f23edc"
+                                                            title = Config.Locale.ID_Gender .. data.sex,
+                                                            icon = data.sex == Config.Locale.ID_Gender_Male and "mars" or "venus",
+                                                            iconColor = data.sex == Config.Locale.ID_Gender_Male and "#3e98f2" or "#f23edc"
                                                         },
                                                         {
-                                                            title = "Születési dátum: " .. data.dob,
+                                                            title = Config.Locale.ID_DOB .. data.dob,
                                                             icon = "baby",
                                                             iconColor = "#ffffff",
-                                                            description = "Kattints a vágólapra másoláshoz!",
+                                                            description = Config.Locale.Copy,
                                                             onSelect = function()
                                                                 lib.setClipboard(data.dob)
                                                                 lib.notify({
-                                                                    description = "Születési dátum kimásolva a vágólapra!",
+                                                                    description = Config.Locale.Copy_Notify,
                                                                     type = "success"
                                                                 })
                                                             end
                                                         },
                                                         {
-                                                            title = "Magasság: " .. data.height,
+                                                            title = Config.Locale.ID_Height .. data.height,
                                                             icon = "up-down",
                                                             iconColor = "#ffffff"
                                                         }
@@ -689,7 +769,7 @@ local function updateContextMenu()
                                         end, GetPlayerServerId(player))
                                     else
                                         lib.notify({
-                                            description = "Nincs játékos a közeledben!",
+                                            description = Config.Locale.No_Player_Nearby,
                                             type = "warning"
                                         })
                                     end
@@ -697,14 +777,14 @@ local function updateContextMenu()
                                 iconColor = isPlayerNear and "#34ed66" or "#ff0000" 
                             },
                             {
-                                title = "Átkutatás",
+                                title = Config.Locale.Search,
                                 icon = "search",
                                 onSelect = function()
                                     if isPlayerNear then
                                         exports.ox_inventory:openNearbyInventory()
                                     else
                                         lib.notify({
-                                            description = "Nincs játékos a közeledben!",
+                                            description = Config.Locale.No_Player_Nearby,
                                             type = "warning"
                                         })
                                     end
@@ -712,7 +792,7 @@ local function updateContextMenu()
                                 iconColor = isPlayerNear and "#34ed66" or "#ff0000"
                             },
                             {
-                                title = "Bilincselés",
+                                title = Config.Locale.HandCuff,
                                 icon = "handcuffs",
                                 onSelect = function()
                                     if isPlayerNear then
@@ -730,7 +810,7 @@ local function updateContextMenu()
                 
                                     else
                                         lib.notify({
-                                            description = "Nincs játékos a közeledben!",
+                                            description = Config.Locale.No_Player_Nearby,
                                             type = "warning"
                                         })
                                     end
@@ -738,14 +818,14 @@ local function updateContextMenu()
                                 iconColor = isPlayerNear and "#34ed66" or "#ff0000"
                             },
                             {
-                                title = "Kisérés",
+                                title = Config.Locale.Escort,
                                 icon = "person-walking",
                                 onSelect = function()
                                     if isPlayerNear then
                                         TriggerServerEvent('policejob:drag', GetPlayerServerId(player))
                                     else
                                         lib.notify({
-                                            description = "Nincs játékos a közeledben!",
+                                            description = Config.Locale.No_Player_Nearby,
                                             type = "warning"
                                         })
                                     end
@@ -753,24 +833,24 @@ local function updateContextMenu()
                                 iconColor = isPlayerNear and "#34ed66" or "#ff0000"
                             },
                             {
-                                title = "járműböl kivétel/betétel",
+                                title = Config.Locale.Put_Out_car,
                                 icon = "car-side",
                                 onSelect = function()
                                     if closestVehicle and isPlayerNear then
                                         TriggerServerEvent('policejob:getin', GetPlayerServerId(player))
                                     elseif isPlayerNear then
                                         lib.notify({
-                                            description = "Nincs jármű a közeledben!",
+                                            description = Config.Locale.No_Vehicle_Nearby,
                                             type = "warning"
                                         })
                                     elseif closestVehicle then
                                         lib.notify({
-                                            description = "Nincs játékos a közeledben!",
+                                            description = Config.Locale.No_Player_Nearby,
                                             type = "warning"
                                         })
                                     else
                                         lib.notify({
-                                            description = "Nincs játékos és jármű a közeledben!",
+                                            description = Config.Locale.No_Vehicle_and_Player_Nearby,
                                             type = "warning"
                                         })
                                     end
@@ -783,19 +863,17 @@ local function updateContextMenu()
                 end
             },
             {
-                title = "Jármü Interackiók",
+                title = Config.Locale.Menu_vehicle,
                 icon = "car",
                 onSelect = function()
-                    local player, distance = ESX.Game.GetClosestPlayer()
-                    local isPlayerNear = distance ~= -1 and distance <= 3.0
-                    local closestVehicle = lib.getClosestVehicle(GetEntityCoords(PlayerPedId()), 3.0, true)
+                    local closestVehicle = lib.getClosestVehicle(GetEntityCoords(PlayerPedId()), 2.0, true)
                     lib.registerContext({
                         id = "kocsi",
-                        title = "Jármü Interackiók",
+                        title = Config.Locale.Menu_vehicle,
                         menu = "f",
                         options = {
                             {
-                                title = "Jármü lefoglalása",
+                                title = Config.Locale.VehicleMenu_Inpound,
                                 icon = "car-side",
                                 iconColor = closestVehicle and "#34ed66" or "#ff0000",
                                 onSelect = function()
@@ -818,185 +896,391 @@ local function updateContextMenu()
                                         DeleteEntity(closestVehicle)
                                     else
                                         lib.notify({
-                                            description = "Nincs jármű a közeledben!",
+                                            description = Config.Locale.No_Vehicle_Nearby,
                                             type = "warning"
                                         })
                                     end
                                 end
                             },
+                            {
+                                title = Config.Locale.VehicleMenu_Info,
+                                icon = "car",
+                                iconColor = "#34ed66",
+                                onSelect = function()
+                                    if closestVehicle then
+                                        TriggerServerEvent('policejob:checkplate', GetVehicleNumberPlateText(closestVehicle))
+                                    --[[else
+                                        local input = lib.inputDialog('Rendszám', {
+                                            {type = 'input', label = 'Jármü Rendszáma', default = 'ABC 123',  required = true, min = 3, max = 7},
+                                        })
+ 
+                                        if not input then return end
+                                        TriggerServerEvent('policejob:checkplate', input[1])]]
+                                    end
+                                end
+                            },
+                            {
+                                title = Config.Locale.Vehicle_Menu_Lockpick,
+                                icon = "lock-open",
+                                iconColor = closestVehicle and "#34ed66" or "#ff0000",
+                                onSelect = function()
+                                    local locked = GetVehicleDoorLockStatus(closestVehicle)
+                                    if closestVehicle and locked == 2 then
+                                        lib.progressCircle({
+                                            duration = 3500,
+                                            position = 'bottom',
+                                            useWhileDead = false,
+                                            disable = {
+                                                car = true,
+                                            },
+                                            anim = {
+                                                dict = 'anim@amb@clubhouse@tutorial@bkr_tut_ig3@',
+                                                clip = 'machinic_loop_mechandplayer',
+                                                flag = 1
+                                            },
+                                        }) 
+                                        SetVehicleDoorsLocked(closestVehicle, 1)
+                                        SetVehicleDoorsLockedForAllPlayers(closestVehicle, false)
+                                        SetVehicleNeedsToBeHotwired(closestVehicle, false)
+                                        IsVehicleNeedsToBeHotwired(closestVehicle)
+                                        lib.notify({
+                                            description = Config.Locale.Vehicle_Unlocked,
+                                            type = "success"
+                                        })
+                                    elseif not closestVehicle then
+                                        lib.notify({
+                                            description = Config.Locale.No_Vehicle_Nearby,
+                                            type = "warning"
+                                        })
+                                    elseif locked then
+                                        lib.notify({
+                                            description = Config.Locale.Vehicle_Not_lock,
+                                            type = "warning"
+                                        })
+                                    else
+                                        lib.notify({
+                                            description = Config.Locale.No_Vehicle_Nearby,
+                                            type = "warning"
+                                        })
+                                    end
+                                end
+                            }
                         }
                     })
                     lib.showContext("kocsi")
+                end
+            },
+            {
+                title = Config.Locale.Menu_Object,
+                icon = "road-barrier",
+                onSelect = function()
+                    lib.registerContext({
+                        id = "obj",
+                        title = Config.Locale.Menu_Object,
+                        menu = "f",
+                        options = {
+                            {
+                                title = Config.Locale.Object_Barrier,
+                                icon = "road-barrier",
+                                onSelect = function()
+                                    PlaceObject("prop_barrier_work05", "road-barrier")
+                                end
+                            },
+                            {
+                                title = Config.Locale.Object_RoadCone,
+                                icon = "life-ring",
+                                onSelect = function()
+                                    PlaceObject("prop_roadcone02a", "life-ring")
+                                end
+                            },
+                            {
+                                title = Config.Locale.Object_SpikeStrip,
+                                icon = "xmarks-lines",
+                                onSelect = function()
+                                    PlaceObject("p_ld_stinger_s", "xmarks-lines")
+                                end
+                            }
+                        }
+                    })
+                    lib.showContext("obj")
                 end
             }
         }
     })
 end
+local function rgbToHex(r, g, b)
+    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+        return string.format("#%02X%02X%02X", r, g, b)
+    else
+        return "#FFFFFF"
+    end
+end
 
-RegisterNetEvent('policejob:getin')
-AddEventHandler('policejob:getin', function()
-    local playerPed = PlayerPedId()
+RegisterNetEvent('policejob:checkplate', function(owner, modell, tuning, id, plate)
+    local closestVehicle = lib.getClosestVehicle(GetEntityCoords(PlayerPedId()), 2.0, true)
+    local modelName = GetDisplayNameFromVehicleModel(modell)
+    modelName = modelName:lower()
+    local r, g, b = GetVehicleCustomPrimaryColour(closestVehicle)
+    local r2, g2, b2 = GetVehicleCustomSecondaryColour(closestVehicle)
+    local color1Hex = rgbToHex(r, g, b)
+    local color2Hex = rgbToHex(r2, g2, b2)
+    lib.registerContext({
+        id = "carinfo",
+        title = "Jármü Információk",
+        menu = "kocsi",
+        options = {
+            {
+                title = "Tulajdonos: " .. owner,
+                icon = "user",
+                iconColor = "#ffffff",
+                description = "Kattints az információk megnézésére!",
+                onSelect = function()
+                    lib.callback('policejob:checkid', false, function(data)
+                        if data then
+                            lib.registerContext({
+                                id = "idcard",
+                                title = "Személyi ellenőrzés",
+                                menu = "carinfo",
+                                options = {
+                                    {
+                                        title = "Név: " .. data.name,
+                                        icon = "id-card",
+                                        iconColor = "#ffffff",
+                                        description = "Kattints a vágólapra másoláshoz!",
+                                        onSelect = function()
+                                            lib.setClipboard(data.name)
+                                            lib.notify({
+                                                description = "Név kimásolva a vágólapra!",
+                                                type = "success"
+                                            })
+                                        end
+                                    },
+                                    {
+                                        title = "Munka: " .. data.job.. " - " .. data.grade,
+                                        icon = "briefcase",
+                                        iconColor = "#bf6412"
+                                    },
+                                    {
+                                        title = "Nem: " .. data.sex,
+                                        icon = data.sex == "Férfi" and "mars" or "venus",
+                                        iconColor = data.sex == "Férfi" and "#3e98f2" or "#f23edc"
+                                    },
+                                    {
+                                        title = "Születési dátum: " .. data.dob,
+                                        icon = "baby",
+                                        iconColor = "#ffffff",
+                                        description = "Kattints a vágólapra másoláshoz!",
+                                        onSelect = function()
+                                            lib.setClipboard(data.dob)
+                                            lib.notify({
+                                                description = "Születési dátum kimásolva a vágólapra!",
+                                                type = "success"
+                                            })
+                                        end
+                                    },
+                                    {
+                                        title = "Magasság: " .. data.height,
+                                        icon = "up-down",
+                                        iconColor = "#ffffff"
+                                    }
+                                }
+                            })
+                            lib.showContext("idcard")
+                        end
+                    end, id)
+                end
+            },
+            {
+                title = "Model: " .. modelName,
+                icon = "car",
+                iconColor = "#3472de"
+            },
+            {
+                title = "Rendszám: ".. plate,
+                icon = "rug"
+            },
+            {
+                title = "Elsődleges szín: " .. color1Hex,
+                icon = "palette",
+                iconColor = color1Hex,
+                description = "Az elsődleges szín HEX kódja.",
+            },
+            {
+                title = "Másodlagos szín: " .. color2Hex,
+                icon = "palette",
+                iconColor = color2Hex,
+                description = "A másodlagos szín HEX kódja.",
+            },
+            {
+                title = "Tuning",
+                icon = "wrench",
+                iconColor = tuning and "#34ed66" or "#ff0000",
+                onSelect = function()
+                    if tuning then
+                        local motor = tuning.modEngine or "N/A"
+                        local armor = tuning.modArmor or "N/A"
+                        local brakes = tuning.modBrakes or "N/A"
+                        local suspension = tuning.modSuspension or "N/A"
+                        local turbo = tuning.modTurbo or "N/A"
+                        local transmission = tuning.modTransmission or "N/A"
+            
+                        lib.registerContext({
+                            id = "mods",
+                            title = "Tuning",
+                            menu = "carinfo",
+                            options = {
+                                {
+                                    title = "Motor: " .. motor,
+                                    icon = "wrench",
+                                    iconColor = motor == "N/A" or motor == -1 and "#ff0000" or "#34ed66",
+                                    disabled = motor == "N/A" or motor == -1
+                                },
+                                {
+                                    title = "Páncél: " .. armor,
+                                    icon = "shield",
+                                    iconColor = armor == "N/A" or armor == -1 and "#ff0000" or "#34ed66",
+                                    disabled = armor == "N/A" or armor == -1
+                                },
+                                {
+                                    title = "Fék: " .. brakes,
+                                    icon = "wrench",
+                                    iconColor = brakes == "N/A" or brakes == -1 and "#ff0000" or "#34ed66",
+                                    disabled = brakes == "N/A" or brakes == -1
+                                },
+                                {
+                                    title = "Felfüggesztés: " .. suspension,
+                                    icon = "wrench",
+                                    iconColor = suspension == "N/A" or suspension == -1 and "#ff0000" or "#34ed66",
+                                    disabled = suspension == "N/A" or suspension == -1
+                                },
+                                {
+                                    title = "Turbo: " .. turbo,
+                                    icon = "wrench",
+                                    iconColor = turbo == "N/A" or turbo == -1 and "#ff0000" or "#34ed66",
+                                    disabled = turbo == "N/A" or turbo == -1
+                                },
+                                {
+                                    title = "Váltó: " .. transmission,
+                                    icon = "wrench",
+                                    iconColor = transmission == "N/A" or transmission == -1 and "#ff0000" or "#34ed66",
+                                    disabled = transmission == "N/A" or transmission == -1
+                                }
+                            }
+                        })
+                        lib.showContext("mods")
+                    else
+                        print("Nincs tuning a járművön.")
+                    end
+                end
+            }
+        }
+    })
+    lib.showContext("carinfo")
+end)
+
+RegisterNetEvent('policejob:getin', function()
+    local playerPed = cache.ped
     local closestVehicle = lib.getClosestVehicle(GetEntityCoords(playerPed), 3.0, true)
 
     if closestVehicle then
         if IsPedInAnyVehicle(playerPed, false) then
             TaskLeaveVehicle(playerPed, closestVehicle, 0)
         else
-            local seats = { -1, 0, 1, 2 }
-            local freeSeat = nil
-
-            for _, seat in ipairs(seats) do
-                if IsVehicleSeatFree(closestVehicle, seat) and seat ~= -1 then
-                    freeSeat = seat
-                    break
+            for _, seat in ipairs({0, 1, 2}) do
+                if IsVehicleSeatFree(closestVehicle, seat) then
+                    TaskEnterVehicle(playerPed, closestVehicle, -1, seat, 1.0, 1, 0)
+                    return
                 end
             end
-
-            if freeSeat then
-                TaskEnterVehicle(playerPed, closestVehicle, -1, freeSeat, 1.0, 1, 0)
-            end
         end
     end
 end)
 
-RegisterNetEvent('policejob:handcufftry')
-AddEventHandler('policejob:handcufftry', function(target, police)
-    local playerPed = PlayerPedId() 
-    local targetPed = GetPlayerPed(GetPlayerFromServerId(target)) 
-    local policePed = GetPlayerPed(GetPlayerFromServerId(police)) 
-    if targetPed ~= policePed then
-        if clocked then  
-            RequestAnimDict("mp_arrest_paired")
-            while not HasAnimDictLoaded("mp_arrest_paired") do
-                Wait(10)
-            end
-            TaskPlayAnim(playerPed, "mp_arrest_paired", "cop_p2_back_right", 8.0, -8.0, -1, 3, 0, false, false, false)
-            Wait(3500)
-            ClearPedTasks(playerPed)
-        end
-    end
-    if targetPed == playerPed then
-        if not handcuffed then
-            RequestAnimDict("mp_arrest_paired")
-            while not HasAnimDictLoaded("mp_arrest_paired") do
-                Wait(10)
-            end
-            TaskPlayAnim(targetPed, "mp_arrest_paired", "crook_p2_back_right", 8.0, -8.0, -1, 3, 0, false, false, false)
-            RemoveAnimDict('mp_arrest_paired')
-            Wait(3500)
-            ClearPedTasks(playerPed)
-        end
-    end
+local function playAnim(ped, dict, anim, duration, flag)
+    lib.requestAnimDict(dict)
+    TaskPlayAnim(ped, dict, anim, 8.0, -8.0, duration or -1, flag or 49, 0, false, false, false)
+end
+
+RegisterNetEvent('policejob:handcufftry', function(target)
+    local targetPed = GetPlayerPed(GetPlayerFromServerId(target))
+    local policePed = cache.ped
+
+    playAnim(policePed, "mp_arrest_paired", "cop_p2_back_right", 3500, 3)
+    playAnim(targetPed, "mp_arrest_paired", "crook_p2_back_right", 3500, 3)
+
+    Wait(3500)
+
+    ClearPedTasks(policePed)
+    ClearPedTasks(targetPed)
 end)
 
-RegisterNetEvent('policejob:handcuff')
-AddEventHandler('policejob:handcuff', function(target)
-    local playerPed = PlayerPedId() 
-    local targetPed = GetPlayerPed(GetPlayerFromServerId(target)) 
+RegisterNetEvent('policejob:handcuff', function(target)
+    local playerPed = cache.ped
+    local targetPed = GetPlayerPed(GetPlayerFromServerId(target))
+
     if targetPed == playerPed then
-        if not handcuffed then
-            RequestAnimDict("mp_arresting")
-            while not HasAnimDictLoaded("mp_arresting") do
-                Wait(10)
-            end
-            TaskPlayAnim(playerPed, "mp_arresting", "idle", 8.0, -8.0, -1, 49, 0, false, false, false)
-            RemoveAnimDict('mp_arresting')
+        local isHandcuffed = Entity(playerPed).state.handcuffed
+
+        if not isHandcuffed then
+            Entity(playerPed).state:set('handcuffed', true, true)
+            playAnim(playerPed, "mp_arresting", "idle")
+
             SetEnableHandcuffs(playerPed, true)
             DisablePlayerFiring(playerPed, true)
             SetPedCanPlayGestureAnims(playerPed, false)
-            handcuffed = true
 
             CreateThread(function()
-                while handcuffed do
+                while Entity(playerPed).state.handcuffed do
                     Wait(0)
-                    DisableControlAction(0, 22, true)
-                    DisableControlAction(0, 23, true)
-                    DisableControlAction(0, 24, true)
-                    DisableControlAction(0, 25, true) 
-                    DisableControlAction(0, 36, true) 
-                    DisableControlAction(0, 45, true) 
-                    DisableControlAction(0, 49, true)
-                    DisableControlAction(0, 75, true)
-                    DisableControlAction(0, 59, true)
-                    DisableControlAction(0, 63, true) 
-                    DisableControlAction(0, 64, true) 
-                    DisableControlAction(0, 140, true) 
-                    DisableControlAction(0, 141, true)
-                    if not IsEntityPlayingAnim(playerPed, 'mp_arresting', 'idle', 49) and handcuffed then
-                        RequestAnimDict("mp_arresting")
-                        while not HasAnimDictLoaded("mp_arresting") do
-                            Wait(10)
-                        end
-                        TaskPlayAnim(playerPed, "mp_arresting", "idle", 8.0, -8.0, -1, 49, 0, false, false, false)
-                        RemoveAnimDict('mp_arresting')
+                    for _, control in ipairs({22, 23, 24, 25, 36, 45, 49, 75, 59, 63, 64, 140, 141}) do
+                        DisableControlAction(0, control, true)
+                    end
+                    if not IsEntityPlayingAnim(playerPed, 'mp_arresting', 'idle', 49) then
+                        playAnim(playerPed, "mp_arresting", "idle")
                     end
                 end
             end)
         else
-            ClearPedTasks(playerPed)
+            Entity(playerPed).state:set('handcuffed', false, true)
             ClearPedTasksImmediately(playerPed)
             ClearPedSecondaryTask(playerPed)
+
             SetEnableHandcuffs(playerPed, false)
             DisablePlayerFiring(playerPed, false)
             SetPedCanPlayGestureAnims(playerPed, true)
-            FreezeEntityPosition(playerPed, false)
-            handcuffed = false
         end
     end
 end)
 
-RegisterNetEvent('policejob:drag')
-AddEventHandler('policejob:drag', function(copSource)
-    local playerPed = PlayerPedId() 
-    local copPed = GetPlayerPed(GetPlayerFromServerId(copSource)) 
+RegisterNetEvent('policejob:drag', function(copSource)
+    local playerPed = cache.ped
+    local copPed = GetPlayerPed(GetPlayerFromServerId(copSource))
 
     if DoesEntityExist(copPed) then
-        AttachEntityToEntity(
-            playerPed, copPed, 11816, -0.16, 0.55, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true
-        )
+        Entity(playerPed).state:set('dragged', true, true)
 
+        AttachEntityToEntity(playerPed, copPed, 11816, -0.16, 0.55, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
         SetEntityCollision(playerPed, false, false)
         SetEntityInvincible(playerPed, true)
         SetPedCanBeTargetted(playerPed, false)
     end
 end)
 
-RegisterNetEvent('policejob:dragStop')
-AddEventHandler('policejob:dragStop', function()
-    local playerPed = PlayerPedId()
-    ClearPedSecondaryTask(playerPed)
+RegisterNetEvent('policejob:dragStop', function()
+    local playerPed = cache.ped
     DetachEntity(playerPed, true, true)
     SetEntityCollision(playerPed, true, true)
     SetEntityInvincible(playerPed, false)
     SetPedCanBeTargetted(playerPed, true)
-    if handcuffed then
-        RequestAnimDict("mp_arresting")
-        while not HasAnimDictLoaded("mp_arresting") do
-            Wait(10)
-        end
-        TaskPlayAnim(playerPed, "mp_arresting", "idle", 8.0, -8.0, -1, 49, 0, false, false, false)
-        RemoveAnimDict('mp_arresting')
-    end
-
+    if handcuffed then playAnim(playerPed, "mp_arresting", "idle") end
 end)
 
-RegisterNetEvent('policejob:dragStart')
-AddEventHandler('policejob:dragStart', function(target)
-    local playerPed = PlayerPedId()
-    isDragging = true
-    draggedPlayer = target
-    if DoesEntityExist(playerPed) then
-        RequestAnimDict("anim@amb@nightclub@mini@drinking@drinking_shots@ped_b@normal")
-        while not HasAnimDictLoaded("anim@amb@nightclub@mini@drinking@drinking_shots@ped_b@normal") do
-            Wait(10)
-        end
-        TaskPlayAnim(playerPed, "anim@amb@nightclub@mini@drinking@drinking_shots@ped_b@normal", "glass_hold", 8.0, -8.0, -1, 49, 0, false, false, false)
-        RemoveAnimDict('anim@amb@nightclub@mini@drinking@drinking_shots@ped_b@normal')
-    end
-    lib.showTextUI("[E] - Elengedés", {
-        position = "right-center",
-        icon = 'handcuffs',
-    })
+RegisterNetEvent('policejob:dragStart', function(target)
+    local playerPed = cache.ped
+    Entity(playerPed).state:set('dragging', target, true)
+
+    playAnim(playerPed, "anim@amb@nightclub@mini@drinking@drinking_shots@ped_b@normal", "glass_hold")
+    lib.showTextUI("[E] - Elengedés", { position = "right-center", icon = 'handcuffs' })
 end)
 
 Citizen.CreateThread(function()
@@ -1013,6 +1297,42 @@ Citizen.CreateThread(function()
             end
         end
     end
+end)
+
+local function stopDragging()
+    local playerPed = PlayerPedId()
+    Entity(playerPed).state:set('dragging', nil, true)
+    lib.hideTextUI()
+    ClearPedSecondaryTask(playerPed)
+end
+
+Citizen.CreateThread(function()
+    while true do
+        local draggingState = Entity(PlayerPedId()).state.dragging
+        if draggingState then
+            if IsControlJustPressed(0, 38) then 
+                TriggerServerEvent('policejob:dragStop', draggingState)
+                stopDragging()
+            end
+            Citizen.Wait(0)
+        else
+            Citizen.Wait(500)
+        end
+    end
+end)
+
+AddEventHandler('onResourceStop', function(resourceName)
+    if GetCurrentResourceName() == resourceName then
+        for i, v in ipairs(obj) do
+            DeleteEntity(v)
+            DeleteObject(v)
+        end
+        lib.hideTextUI()
+    end
+end)
+
+RegisterCommand("clock", function ()
+    clocked = not clocked
 end)
 
 RegisterCommand("Policemenu", function ()
